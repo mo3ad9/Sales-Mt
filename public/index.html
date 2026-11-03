@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeddah Sales Team</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Tahoma, Arial, sans-serif;
+      background: #f3f4f8;
+      color: #172033;
+    }
+    header {
+      background: #151b2b;
+      color: white;
+      padding: 22px;
+      text-align: center;
+      font-size: 23px;
+      font-weight: bold;
+    }
+    main { max-width: 650px; margin: 30px auto; padding: 15px; }
+    .card {
+      background: white;
+      padding: 25px;
+      margin-bottom: 20px;
+      border-radius: 14px;
+      box-shadow: 0 4px 15px #0000000d;
+    }
+    h2 { margin-top: 0; }
+    label { display: block; margin: 15px 0 7px; }
+    input {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #d5d8e0;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 17px;
+      border: 0;
+      border-radius: 8px;
+      background: #6045d8;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .hidden { display: none; }
+    .stat {
+      background: #f0edff;
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+    #message { color: #6045d8; }
+  </style>
+</head>
+<body>
+
+<header>
+  Jeddah Sales Team
+  <div style="font-size:13px;font-weight:normal;margin-top:7px">
+    إدارة مبيعات جدة
+  </div>
+</header>
+
+<main>
+  <section class="card" id="login">
+    <h2>تسجيل الدخول</h2>
+    <form id="loginForm">
+      <label>رقم الموظف</label>
+      <input name="employeeNo" required>
+
+      <label>كلمة المرور</label>
+      <input name="password" type="password" required>
+
+      <button type="submit">دخول</button>
+    </form>
+    <p id="loginMessage"></p>
+  </section>
+
+  <section class="hidden" id="dashboard">
+    <div class="card">
+      <h2 id="welcome">مرحبًا بك</h2>
+      <div class="stat">لوحة متابعة تفعيلات الفريق</div>
+      <button onclick="loadActivations()">تحديث التفعيلات</button>
+      <button onclick="logout()" style="background:#555">تسجيل الخروج</button>
+    </div>
+
+    <div class="card">
+      <h2>إضافة تفعيل</h2>
+      <form id="activationForm">
+        <label>اسم الباقة</label>
+        <input name="packageName" required>
+
+        <label>قيمة البيع بالريال</label>
+        <input name="amount" type="number" min="0" value="0">
+
+        <button type="submit">إرسال التفعيل</button>
+      </form>
+      <p id="message"></p>
+    </div>
+
+    <div class="card">
+      <h2>سجل التفعيلات</h2>
+      <div id="activationList">لا توجد بيانات حتى الآن</div>
+    </div>
+  </section>
+</main>
+
+<script>
+  async function api(url, options = {}) {
+    const response = await fetch('/api' + url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'حدث خطأ');
+    return data;
+  }
+
+  document.getElementById('loginForm').onsubmit = async function(e) {
+    e.preventDefault();
+    const form = Object.fromEntries(new FormData(this));
+
+    try {
+      const data = await api('/login', {
+        method: 'POST',
+        body: JSON.stringify(form)
+      });
+      showDashboard(data.user);
+    } catch (error) {
+      document.getElementById('loginMessage').textContent = error.message;
+    }
+  };
+
+  function showDashboard(user) {
+    document.getElementById('login').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    document.getElementById('welcome').textContent = 'مرحبًا، ' + user.name;
+    loadActivations();
+  }
+
+  document.getElementById('activationForm').onsubmit = async function(e) {
+    e.preventDefault();
+    const form = Object.fromEntries(new FormData(this));
+
+    try {
+      await api('/activations', {
+        method: 'POST',
+        body: JSON.stringify(form)
+      });
+      document.getElementById('message').textContent = 'تم إرسال التفعيل بنجاح';
+      this.reset();
+      loadActivations();
+    } catch (error) {
+      document.getElementById('message').textContent = error.message;
+    }
+  };
+
+  async function loadActivations() {
+    try {
+      const data = await api('/activations');
+      document.getElementById('activationList').innerHTML =
+        data.map(a => `<div class="stat">
+          ${escapeHtml(a.full_name)} — ${escapeHtml(a.package_name)}
+          <br>${Number(a.amount).toLocaleString('ar-SA')} ر.س
+        </div>`).join('') || 'لا توجد تفعيلات';
+    } catch (error) {
+      document.getElementById('activationList').textContent = error.message;
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+    );
+  }
+
+  async function logout() {
+    await api('/logout', {method:'POST'});
+    location.reload();
+  }
+
+  api('/me').then(data => {
+    if (data.user) showDashboard(data.user);
+  }).catch(() => {});
+</script>
+
+</body>
+</html>
